@@ -1,0 +1,21 @@
+prefix=@prefix@
+confdir=@sysconfdir@/@PACKAGE_TARNAME@
+imagedir=@prefix@/lib/@PACKAGE_TARNAME@
+sysconfdir=@sysconfdir@
+VPATH=@srcdir@
+
+INSTALL=@INSTALL@
+INSTALL_DATA=@INSTALL_DATA@
+MKDIR_P=@MKDIR_P@
+
+all clean:
+
+distclean:
+	rm config.mak etc_Makefile Makefile
+
+install:
+	$(INSTALL) -d $(DESTDIR)$(confdir)/files
+	$(INSTALL) -d $(DESTDIR)$(confdir)/specs
+	$(INSTALL_DATA) etc_Makefile $(DESTDIR)$(confdir)/Makefile
+	$(INSTALL_DATA) config.mak $(DESTDIR)$(confdir)/config.mak
+	$(MKDIR_P) $(DESTDIR)$(imagedir)

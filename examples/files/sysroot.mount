@@ -1,0 +1,10 @@
+[Unit]
+Before=local-fs.target
+
+[Mount]
+Where=/sysroot
+What=/dev/levy/newroot-%v.squashfs
+Type=squashfs
+#What=/dev/levy/debian_root
+#Type=ext4
+Options=nosuid,nodev,ro,noatime,discard

@@ -1,0 +1,26 @@
+prefix=@prefix@
+datarootdir=@datarootdir@
+docdir=@docdir@@PACKAGE_TARNAME@/
+srcdir=@srcdir@
+VPATH=@srcdir@
+
+INSTALL=@INSTALL@
+INSTALL_DATA=@INSTALL_DATA@
+LN_S=@LN_S@
+
+all clean:
+
+distclean:
+	rm Makefile
+
+install:
+	$(INSTALL) -d $(DESTDIR)$(docdir)examples/etc_systemd_system/common
+	$(INSTALL) -d $(DESTDIR)$(docdir)examples/etc_systemd_system/acpid.service.d
+	$(INSTALL) -d $(DESTDIR)$(docdir)examples/files
+	$(INSTALL) -d $(DESTDIR)$(docdir)examples/specs
+	$(INSTALL_DATA) $(wildcard $(srcdir)/etc_systemd_system/common/*) $(DESTDIR)/$(docdir)/examples/etc_systemd_system/common/
+	$(LN_S) -f ../common/protectsystem-strict.conf $(DESTDIR)/$(docdir)/examples/etc_systemd_system/acpid.service.d/
+	$(LN_S) -f ../common/rootimage-dev.conf $(DESTDIR)/$(docdir)/examples/etc_systemd_system/acpid.service.d/
+	$(INSTALL_DATA) $(wildcard $(srcdir)/files/*) $(DESTDIR)/$(docdir)/examples/files/
+	$(INSTALL_DATA) $(wildcard $(srcdir)/specs/*) $(DESTDIR)/$(docdir)/examples/specs/
+

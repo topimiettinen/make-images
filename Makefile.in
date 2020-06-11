@@ -1,0 +1,20 @@
+srcdir=@srcdir@
+VPATH=@srcdir@
+
+all install clean distclean::
+	make -C etc_make-images $@
+	make -C examples $@
+
+distclean::
+	rm config.log config.status configure Makefile
+	rm -rf autom4te.cache
+
+$(srcdir)/configure: configure.ac
+	cd '$(srcdir)' && autoconf
+
+Makefile: Makefile.in config.status
+	./config.status
+
+config.status: configure
+	./config.status --recheck
+

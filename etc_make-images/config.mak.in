@@ -1,0 +1,15 @@
+# LVM volume group
+CONFIG_VG=levy
+
+# Directory for auxiliary files
+CONFIG_FILES_DIR=@sysconfdir@/@PACKAGE_TARNAME@/files
+
+# Directory for image config files
+CONFIG_SPECS_DIR=@sysconfdir@/@PACKAGE_TARNAME@/specs
+
+# Destination for non-device images or directories
+CONFIG_IMAGE_DIR=@prefix@/lib/@PACKAGE_TARNAME@
+
+# Destination for stamp files for Make
+CONFIG_STAMP_DIR=@prefix@/lib/@PACKAGE_TARNAME@
+

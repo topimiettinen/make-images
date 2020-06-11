@@ -1,0 +1,11 @@
+[Unit]
+DefaultDependencies=no
+StartLimitIntervalSec=0
+Before=sysinit.target initrd-switch-root.service
+Wants=initrd-switch-root.service
+After=systemd-udevd.service
+
+[Service]
+Type=oneshot
+#ExecStart=/sbin/lvm lvchange -aay -y --sysinit --ignoreskippedcluster /dev/levy/debian_root
+ExecStart=/sbin/lvm lvchange -aay -y --sysinit --ignoreskippedcluster /dev/levy/newroot-%v.squashfs

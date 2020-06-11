@@ -1,0 +1,146 @@
+include @sysconfdir@/make-images/config.mak
+
+all:
+
+IMAGE_SUFFIX:=.squashfs
+INITRD_SUFFIX:=.initrd
+IMAGE_DEV_DIR:=/dev/$(CONFIG_VG)
+IMAGE_SIZE:=10M
+
+DIR_SUFFIX:=.dir
+
+TMP_DIR:=/tmp
+ifeq ($(V),1)
+	CHMOD_V="-c"
+	CHCON_V="-v"
+	CPIO_V="--verbose"
+	ECHO=echo
+	IUCODE_TOOL_V="--verbose"
+	MKSQUASHFS_V=
+	SETFILES_V="v"
+else
+	CHMOD_V=
+	CHCON_V=
+	CPIO_V="--quiet"
+	ECHO=:
+	IUCODE_TOOL_V="--quiet"
+	MKSQUASHFS_V=-no-progress -quiet
+	SETFILES_V=
+endif
+
+# list kernel versions
+KVERS=$(sort $(notdir $(wildcard /usr/lib/modules/*)))
+
+xldd=$(shell for bin in $(1); do ldd $$bin 2>/dev/null | awk '{print $$(NF-1)}' | grep -v linux-vdso | grep -v statically | grep -v dynamic; done | sed 's/^\/lib/\/usr\/lib/g')
+
+STAMPS:=
+SYSTEM_STAMPS:=
+BOOT_STAMPS:=
+STAMP_SUFFIX=.stamp
+addstamp=$(patsubst %,%$(STAMP_SUFFIX),$(1))
+delstamp=$(patsubst %$(STAMP_SUFFIX),%,$(1))
+stampdir=$(addprefix $(CONFIG_STAMP_DIR)/,$(call addstamp,$(1)))
+
+include $(sort $(wildcard $(CONFIG_SPECS_DIR)/*.mk))
+
+# stamp files list also dependencies
+-include $(wildcard $(CONFIG_STAMP_DIR)/*.stamp)
+
+all: $(STAMPS) $(SYSTEM_STAMPS) $(BOOT_STAMPS)
+
+$(SYSTEM_STAMPS): $(STAMPS)
+
+clean:
+	rm -f $(STAMPS)
+
+%$(STAMP_SUFFIX): $(BINS) $(FILES)
+	@set -e; \
+	image=$(notdir $(call delstamp,$@)); \
+	echo image: $$image; \
+	libs="$(call xldd,$(BINS) $(BINS_NOFLATTEN))"; \
+	if [ "$(USE_DEV)" = "y" ]; then prefix="$(IMAGE_DEV_DIR)"; else prefix="$(CONFIG_IMAGE_DIR)"; fi; \
+	if [ "$(USE_DIR)" = "y" ]; then suffix="$(DIR_SUFFIX)"; else if [ "$(USE_INITRD)" = "y" ]; then suffix="$(INITRD_SUFFIX)"; else suffix="$(IMAGE_SUFFIX)"; fi; fi; \
+	if [ "$(USE_KVERS)" = "y" ]; then \
+		kvers="$(KVERS)"; \
+	else \
+		kvers="all"; \
+		if [ ! -z "$(KVER_FILES)" ]; then echo Warning: USE_KVERS is not set but KVER_FILES is not empty: $(KVER_FILES); fi; \
+		if [ ! -z "$(KVER_FILES_LIST)" ]; then echo Warning: USE_KVERS is not set but KVER_FILES is not empty: $(KVER_FILES_LIST); fi; \
+		if [ ! -z "$(KVER_DIRS_ALL_NOFLATTEN)" ]; then echo Warning: USE_KVERS is not set but KVER_DIRS_ALL_NOFLATTEN is not empty: $(KVER_DIRS_ALL_NOFLATTEN); fi; \
+	fi; \
+	for b in $(BINS) $(BINS_NOFLATTEN); do if [ -L $$b ]; then echo -n "Warning: $$b is a link "; ls -l $$b; fi; done; \
+	$(ECHO) USE_DIR: $(USE_DIR); \
+	$(ECHO) USE_DEV: $(USE_DEV); \
+	$(ECHO) USE_KVERS: $(USE_KVERS); \
+	$(ECHO) USE_INITRD: $(USE_INITRD); \
+	rm -f $@.tmp; \
+	for kver in $$kvers; do \
+		if [ ! -z "$(KVER_FILES_LIST)" ]; then \
+			kver_files_list=`echo $(KVER_FILES_LIST) | sed s/@@KVER@@/$$kver/g`; \
+			kver_files=`cat $$kver_files_list`; \
+		fi; \
+		kver_files=`echo $$kver_files $(KVER_FILES) | sed s/@@KVER@@/$$kver/g`; \
+		kver_dirs_all_noflatten=`echo $(KVER_DIRS_ALL_NOFLATTEN) | sed s/@@KVER@@/$$kver/g`; \
+		paths="$(BINS) $$libs $(FILES) $(NODEP_FILES) $$kver_files"; \
+		paths_noflatten="$(BINS_NOFLATTEN) $(LIBS_NOFLATTEN) $(FILES_NOFLATTEN) $(NODEP_FILES_NOFLATTEN)"; \
+		dirs_all_noflatten="$(DIRS_ALL_NOFLATTEN) $$kver_dirs_all_noflatten"; \
+		imagepath="$$prefix/$$image-$$kver$$suffix"; \
+		echo imagepath $$imagepath; \
+		imagepaths="$$imagepaths $$imagepath"; \
+		if [ "$(USE_DIR)" = "y" ]; then dest="$$imagepath"; else dest=`mktemp -d`; fi; \
+		$(ECHO) dirs_all $(DIRS_ALL); \
+		$(ECHO) bins: $(BINS); \
+		$(ECHO) libs: $$libs; \
+		$(ECHO) files: $(FILES); \
+		$(ECHO) paths $$paths; \
+		$(ECHO) paths_noflatten $$paths_noflatten; \
+		$(ECHO) kver_files: $$kver_files; \
+		$(ECHO) kver_dirs_all_noflatten: $$kver_dirs_all_noflatten; \
+		$(ECHO) DEST $$dest; \
+		if [ -e "$$imagepath" -a ! -b "$$imagepath" ]; then mv $$imagepath $$imagepath.old || true; fi; \
+		if [ "$(USE_DIR)" = "y" ]; then mkdir $$dest; fi; \
+		(for p in $$paths; do echo $$p; done; for p in $(DIRS_ALL); do find $$p -print; done) | \
+		 sed 's~^/~~g' | \
+		 tar -cf - -C / --dereference --no-recursion --acls --selinux --xattrs --verbatim-files-from --files-from - | \
+		 tar -xf - -C $$dest --acls --selinux --xattrs; \
+		(for p in $$paths_noflatten; do echo $$p; done; for p in $$dirs_all_noflatten; do find $$p -print; done) | \
+		 sed 's~^/~~g' | \
+		 tar -cf - -C / --no-recursion --acls --selinux --xattrs --verbatim-files-from --files-from - | \
+		 tar -xf - -C $$dest --acls --selinux --xattrs; \
+		for d in $(DIRS); do mkdir -p $$dest/$$d; done; \
+		for l in $(LINKS); do if [ -e $$dest/$$l ]; then echo Warning link destination $$dest/$$l exists, removing; rm $$dest/$$l; fi; cp -aP $$l $$dest/$$l; done; \
+		for l in $(SPECIAL_FILES); do src=$${l%:*}; dst=$${l#*:}; $(ECHO) special file src $$src dst $$dst; \
+			if [ -e $$dest/$$dst ]; then rm $$dest/$$dst; fi; cp -aP $$src $$dest/$$dst; done; \
+		for l in $(SPECIAL_LINKS); do src=$${l%:*}; dst=$${l#*:}; $(ECHO) special link src $$src dst $$dst; \
+			if [ -e $$dest/$$dst ]; then rm $$dest/$$dst; fi; ln -s $$src $$dest/$$dst; done; \
+		chmod $(CHMOD_V) 0755 $$dest; \
+		if [ -d $$dest/etc ]; then find $$dest/etc -type f -exec chmod $(CHMOD_V) ugo-x '{}' \; ; fi; \
+		chmod $(CHMOD_V) -x $$dest/usr/lib/x86_64-linux-gnu/lib*.so*; \
+		if [ -z "$(USE_INITRD)" ]; then \
+			if [ -e $$dest$$dest$(CONFIG_IMAGE_DIR) ]; then setfiles_exclude="-e $$dest$(CONFIG_IMAGE_DIR)"; else unset setfiles_exclude; fi; \
+			find $$dest -path $$dest$(CONFIG_IMAGE_DIR) -prune -o -print0 | \
+				setfiles -0 -f - -FID$(SETFILES_V) $$setfiles_exclude -r $$dest /etc/selinux/default/contexts/files/file_contexts; \
+			if [ -d "$$dest$(CONFIG_IMAGE_DIR)" ]; then chcon $(CHCON_V) --reference=$(CONFIG_IMAGE_DIR) $$dest$(CONFIG_IMAGE_DIR); fi; \
+			if [ -z "$(USE_DIR)" ]; then \
+				: > $$imagepath && chmod $(CHMOD_V) 0600 $$imagepath; \
+				mksquashfs $$dest $$imagepath -all-root -noappend $(MKSQUASHFS_V); \
+			fi; \
+		else \
+			iucode_tool $(IUCODE_TOOL_V) --scan-system --write-earlyfw=$$imagepath /lib/firmware/intel-ucode; \
+			(cd $$dest && find . -print0 | sort --zero-terminated | cpio --null $(CPIO_V) --create --reproducible --format=newc ) | gzip >> $$imagepath; \
+		fi; \
+		rm -rf $$imagepath.old; \
+		(for p in $$paths $$paths_noflatten; do if [ ! -L "$$dest$$p" -a -f "$$dest$$p" ]; then echo $$p; fi; done; \
+		 for p in $(DIRS_ALL) $$dirs_all_noflatten; do find $$p -type f -print; done; \
+		 for l in $(SPECIAL_FILES); do if [ ! -L "$${l%:*}" -a -f "$${l%:*}" ]; then echo "$${l%:*}"; fi; done \
+		) | sed 's/\(.*\)/ \1 \\/g' >> $@.tmp; \
+		if [ -z "$(USE_DIR)" ]; then \
+			rm -rf $$dest; \
+		fi; \
+	done
+	@echo "$@: \\" > $@
+	@sort --unique $@.tmp >> $@
+	@rm $@.tmp
+	@echo >> $@
+	@echo >> $@
+

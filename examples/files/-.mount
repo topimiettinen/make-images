@@ -1,0 +1,8 @@
+[Unit]
+Before=local-fs.target
+
+[Mount]
+Where=/
+What=/dev/levy/newroot-%v
+Type=squashfs
+Options=nosuid,nodev,ro,noatime,discard
